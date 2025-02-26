@@ -1,4 +1,4 @@
-module githib.com/zikwall/nullable
+module github.com/zikwall/nullable
 
 go 1.22.2
 
