@@ -102,3 +102,7 @@ func (n *Nullable[T]) UnmarshalJSON(data []byte) error {
 	n.notNull = true
 	return nil
 }
+
+func (n Nullable[T]) IsZero() bool {
+	return n.IsNull()
+}
