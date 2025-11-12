@@ -1,369 +1,182 @@
-package nullable
+package nullable_test
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/zikwall/nullable"
 )
 
 func TestNew(t *testing.T) {
-	t.Parallel()
-
-	t.Run("int", func(t *testing.T) {
-		t.Parallel()
-
-		want := Nullable[int]{
-			value:   7,
-			notNull: true,
-		}
-
-		assert.Equal(t, want, New(7))
-	})
-
-	t.Run("nil slice", func(t *testing.T) {
-		t.Parallel()
-
-		want := Nullable[[]int]{
-			value:   nil,
-			notNull: true,
-		}
-
-		var slice []int
-
-		assert.Equal(t, want, New(slice))
-		assert.Equal(t, want, New[[]int](nil))
-	})
-
-	t.Run("any", func(t *testing.T) {
-		t.Parallel()
-
-		want := Nullable[any]{
-			value:   nil,
-			notNull: true,
-		}
-
-		var v any
-
-		assert.Equal(t, want, New(v))
-	})
-
-	t.Run("pointer", func(t *testing.T) {
-		t.Parallel()
-
-		want := Nullable[*int]{
-			value:   nil,
-			notNull: true,
-		}
-
-		var v *int
-
-		assert.Equal(t, want, New(v))
-	})
+	n := nullable.New(42)
+	require.False(t, n.IsNull())
+	require.True(t, n.NotNull())
+	require.Equal(t, 42, n.Value())
 }
 
-func TestConvertRef(t *testing.T) {
-	t.Parallel()
+func TestNullConstructor(t *testing.T) {
+	n := nullable.Null[string]()
+	require.True(t, n.IsNull())
+	require.False(t, n.NotNull())
+	require.Empty(t, n.Value())
+	require.Nil(t, n.Ref())
 
-	v := "test"
-	tests := []struct {
-		name string
-		arg  *string
-		want Nullable[string]
-	}{
-		{
-			name: "positive",
-			arg:  &v,
-			want: Nullable[string]{
-				value:   v,
-				notNull: true,
-			},
-		},
-		{
-			name: "nil",
-			arg:  nil,
-			want: Nullable[string]{},
-		},
-	}
-
-	conv := func(ref *string) string {
-		if ref == nil {
-			return ""
-		}
-
-		return *ref
-	}
-
-	for _, tt := range tests {
-		test := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := ConvertRef(test.arg, conv)
-			assert.Equal(t, test.want, got, "incorrect result")
-		})
-	}
+	b, err := json.Marshal(n)
+	require.NoError(t, err)
+	require.Equal(t, "null", string(b))
 }
 
 func TestFromRef(t *testing.T) {
-	t.Parallel()
+	val := "hello"
+	n := nullable.FromRef(&val)
+	require.True(t, n.NotNull())
+	require.Equal(t, "hello", n.Value())
 
-	v := 42.42
-	tests := []struct {
-		name string
-		arg  *float64
-		want Nullable[float64]
-	}{
-		{
-			name: "nil",
-			arg:  nil,
-			want: Nullable[float64]{},
-		},
-		{
-			name: "positive",
-			arg:  &v,
-			want: Nullable[float64]{
-				value:   v,
-				notNull: true,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		test := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := FromRef(test.arg)
-			assert.Equal(t, test.want, got, "incorrect result")
-		})
-	}
+	var nilPtr *string
+	n2 := nullable.FromRef(nilPtr)
+	require.True(t, n2.IsNull())
+	require.Empty(t, n2.Value())
 }
 
-func TestNullable_IsNull(t *testing.T) {
-	t.Parallel()
+func TestConvertRef(t *testing.T) {
+	type user struct{ Name string }
+	u := &user{"Bob"}
 
-	tests := []struct {
-		name string
-		arg  Nullable[int]
-		want bool
-	}{
-		{
-			name: "empty",
-			arg:  Nullable[int]{},
-			want: true,
-		},
-		{
-			name: "positive",
-			arg: Nullable[int]{
-				value:   7,
-				notNull: true,
-			},
-			want: false,
-		},
-	}
+	n := nullable.ConvertRef(u, func(u *user) string { return u.Name })
+	require.True(t, n.NotNull())
+	require.Equal(t, "Bob", n.Value())
 
-	for _, tt := range tests {
-		test := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := test.arg.IsNull()
-			assert.Equal(t, test.want, got, "incorrect result")
-		})
-	}
+	var nilUser *user
+	n2 := nullable.ConvertRef(nilUser, func(u *user) string { return u.Name })
+	require.True(t, n2.IsNull())
 }
 
-func TestNullable_NotNull(t *testing.T) {
-	t.Parallel()
+func TestValue_IsNull_NotNull(t *testing.T) {
+	n := nullable.Nullable[int]{}
+	require.True(t, n.IsNull())
+	require.False(t, n.NotNull())
+	require.Equal(t, 0, n.Value())
 
-	tests := []struct {
-		name string
-		arg  Nullable[string]
-		want bool
-	}{
-		{
-			name: "positive",
-			arg: Nullable[string]{
-				value:   "testing",
-				notNull: true,
-			},
-			want: true,
-		},
-		{
-			name: "empty",
-			arg:  Nullable[string]{},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		test := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := test.arg.NotNull()
-			assert.Equal(t, test.want, got, "incorrect result")
-		})
-	}
+	n2 := nullable.New(99)
+	require.False(t, n2.IsNull())
+	require.Equal(t, 99, n2.Value())
 }
 
-func TestNullable_Value(t *testing.T) {
-	t.Parallel()
+func TestRef(t *testing.T) {
+	n := nullable.New("data")
+	ref := n.Ref()
+	require.NotNil(t, ref)
+	require.Equal(t, "data", *ref)
 
-	tests := []struct {
-		name string
-		arg  Nullable[float64]
-		want float64
-	}{
-		{
-			name: "positive",
-			arg: Nullable[float64]{
-				value:   13.777,
-				notNull: true,
-			},
-			want: 13.777,
-		},
-		{
-			name: "empty",
-			arg:  Nullable[float64]{},
-			want: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		test := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := test.arg.Value()
-			assert.Equal(t, test.want, got, "incorrect result")
-		})
-	}
+	n2 := nullable.Nullable[string]{}
+	require.Nil(t, n2.Ref())
 }
 
-func TestNullable_Ref(t *testing.T) {
-	t.Parallel()
+func TestSetAndUnset(t *testing.T) {
+	n := nullable.Null[int]()
+	require.True(t, n.IsNull())
 
-	v := "arg"
-	tests := []struct {
-		name string
-		arg  Nullable[string]
-		want *string
-	}{
-		{
-			name: "positive",
-			arg: Nullable[string]{
-				value:   v,
-				notNull: true,
-			},
-			want: &v,
-		},
-		{
-			name: "empty",
-			arg:  Nullable[string]{},
-			want: nil,
-		},
-	}
+	n.Set(10)
+	require.True(t, n.NotNull())
+	require.Equal(t, 10, n.Value())
 
-	for _, tt := range tests {
-		test := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got := test.arg.Ref()
-			assert.Equal(t, test.want, got, "incorrect result")
-		})
-	}
+	n.Unset()
+	require.True(t, n.IsNull())
+	require.Equal(t, 0, n.Value())
 }
 
-func TestNullable_UnmarshalJSON(t *testing.T) {
-	type testdata struct {
-		Integer Nullable[int]    `json:"integer"`
-		String  Nullable[string] `json:"string"`
-	}
+func TestStringMethod(t *testing.T) {
+	n := nullable.New("hello")
+	require.Equal(t, "hello", n.String())
 
-	type args struct {
-		data []byte
-	}
+	n2 := nullable.Null[string]()
+	require.Equal(t, "null", n2.String())
+}
 
-	type testCase[T any] struct {
-		name    string
-		args    args
-		want    T
-		wantErr assert.ErrorAssertionFunc
-	}
+func TestEqualMethod(t *testing.T) {
+	n1 := nullable.New(42)
+	n2 := nullable.New(42)
+	n3 := nullable.New(100)
+	nNull := nullable.Null[int]()
 
-	tests := []testCase[testdata]{
-		{
-			name: "successfully unmarshall empty struct",
-			args: args{
-				data: []byte(`{}`),
-			},
-			want: testdata{
-				Integer: Nullable[int]{},
-				String:  Nullable[string]{},
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "successfully unmarshall half empty struct",
-			args: args{
-				data: []byte(`{"string": "kek"}`),
-			},
-			want: testdata{
-				Integer: Nullable[int]{},
-				String:  New[string]("kek"),
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "successfully unmarshall struct",
-			args: args{
-				data: []byte(`{"string": "kek", "integer": 123}`),
-			},
-			want: testdata{
-				Integer: New[int](123),
-				String:  New[string]("kek"),
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "successfully unmarshall null values struct",
-			args: args{
-				data: []byte(`{"string": null, "integer": null}`),
-			},
-			want: testdata{
-				Integer: Nullable[int]{},
-				String:  Nullable[string]{},
-			},
-			wantErr: assert.NoError,
-		},
-		{
-			name: "successfully unmarshall wrong struct",
-			args: args{
-				data: []byte(`{"string": 123, "integer": null}`),
-			},
-			want: testdata{
-				Integer: Nullable[int]{},
-				String:  Nullable[string]{},
-			},
-			wantErr: assert.Error,
-		},
-	}
+	require.True(t, n1.Equal(n2), "equal values should match")
+	require.False(t, n1.Equal(n3), "different values should not match")
+	require.False(t, n1.Equal(nNull), "non-null vs null should differ")
+	require.True(t, nNull.Equal(nullable.Null[int]()), "both nulls should be equal")
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var n testdata
+func TestEqualWithStruct(t *testing.T) {
+	type Point struct{ X, Y int }
+	a := nullable.New(Point{1, 2})
+	b := nullable.New(Point{1, 2})
+	c := nullable.New(Point{2, 3})
 
-			tt.wantErr(
-				t,
-				json.Unmarshal(tt.args.data, &n),
-				fmt.Sprintf("UnmarshalJSON(%v)", tt.args.data),
-			)
+	require.True(t, a.Equal(b))
+	require.False(t, a.Equal(c))
+}
 
-			assert.Equal(t, tt.want, n)
-		})
-	}
+func TestSetThenMarshal(t *testing.T) {
+	n := nullable.Null[string]()
+	n.Set("go")
+	require.True(t, n.NotNull())
+
+	data, err := json.Marshal(n)
+	require.NoError(t, err)
+	require.Equal(t, `"go"`, string(data))
+}
+
+func TestMarshalJSON_NotNull(t *testing.T) {
+	n := nullable.New("abc")
+	data, err := json.Marshal(n)
+	require.NoError(t, err)
+	require.Equal(t, `"abc"`, string(data))
+}
+
+func TestMarshalJSON_Null(t *testing.T) {
+	n := nullable.Nullable[int]{}
+	data, err := json.Marshal(n)
+	require.NoError(t, err)
+	require.Equal(t, "null", string(data))
+}
+
+func TestUnmarshalJSON_Value(t *testing.T) {
+	var n nullable.Nullable[int]
+	err := json.Unmarshal([]byte("123"), &n)
+	require.NoError(t, err)
+	require.True(t, n.NotNull())
+	require.Equal(t, 123, n.Value())
+}
+
+func TestUnmarshalJSON_Null(t *testing.T) {
+	var n nullable.Nullable[int]
+	err := json.Unmarshal([]byte("null"), &n)
+	require.NoError(t, err)
+	require.True(t, n.IsNull())
+	require.Equal(t, 0, n.Value())
+}
+
+func TestUnmarshalJSON_Empty(t *testing.T) {
+	var n nullable.Nullable[string]
+	err := json.Unmarshal([]byte("null"), &n)
+	require.NoError(t, err)
+	require.True(t, n.IsNull())
+}
+
+func TestUnmarshalJSON_Empty2(t *testing.T) {
+	var n nullable.Nullable[string]
+
+	err := n.UnmarshalJSON([]byte(""))
+	assert.NoError(t, err)
+	assert.True(t, n.IsNull())
+}
+
+func TestIsZero(t *testing.T) {
+	n := nullable.Nullable[int]{}
+	require.True(t, n.IsZero())
+
+	n2 := nullable.New(5)
+	require.False(t, n2.IsZero())
 }

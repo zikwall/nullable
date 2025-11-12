@@ -1,6 +1,11 @@
 package nullable
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"reflect"
+)
 
 // Nullable is a generic type that can hold a value or represent a null state.
 type Nullable[T any] struct {
@@ -14,6 +19,11 @@ func New[T any](v T) Nullable[T] {
 		value:   v,
 		notNull: true,
 	}
+}
+
+// Null returns a Nullable representing a null value.
+func Null[T any]() Nullable[T] {
+	return Nullable[T]{}
 }
 
 // ConvertRef converts a reference of type S to of Nullable of type T using the provided conversion function.
@@ -72,6 +82,38 @@ func (n Nullable[T]) Ref() *T {
 	return &n.value
 }
 
+// Set assigns a new non-null value.
+func (n *Nullable[T]) Set(v T) {
+	n.value = v
+	n.notNull = true
+}
+
+// Unset marks the value as null.
+func (n *Nullable[T]) Unset() {
+	var zero T
+	n.value = zero
+	n.notNull = false
+}
+
+// Equal compares two Nullable[T] values.
+func (n Nullable[T]) Equal(other Nullable[T]) bool {
+	if n.IsNull() && other.IsNull() {
+		return true
+	}
+	if n.IsNull() != other.IsNull() {
+		return false
+	}
+	return reflect.DeepEqual(n.value, other.value)
+}
+
+// String returns "null" or fmt.Sprintf("%v", value).
+func (n Nullable[T]) String() string {
+	if n.IsNull() {
+		return "null"
+	}
+	return fmt.Sprintf("%v", n.value)
+}
+
 // MarshalJSON implements the json.Marshaler interface.
 // It serializes the contained value if not null, otherwise it serializes as null.
 func (n Nullable[T]) MarshalJSON() ([]byte, error) {
@@ -84,13 +126,11 @@ func (n Nullable[T]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements the json.Unmarshaler interface.
 // It deserializes JSON data into the Nullable struct, setting it to null if the data is JSON null.
 func (n *Nullable[T]) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
+	// Treat explicit null or empty input as null
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
 		n.notNull = false
-		return nil
-	}
-
-	if len(data) == 0 {
-		n.notNull = false
+		var zero T
+		n.value = zero
 		return nil
 	}
 
