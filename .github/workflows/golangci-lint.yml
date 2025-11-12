@@ -1,5 +1,11 @@
 name: golangci_lint
 on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Who to greet"
+        default: "World"
+
   push:
     paths-ignore:
       - '.github/**'
